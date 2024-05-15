@@ -1,0 +1,39 @@
+# socket module provides access to the BSD socket interface
+# allowing communication between devices over a network
+
+import socket
+#Define the server address (localhost) and port (7777)
+
+host = "localhost"
+port = 7777
+
+# Creates a new socket object
+
+s = socket.socket()
+# Connects the socket to the server at the specified host and port
+
+s.connect((host, port))
+
+# received data up to 1024 bytes
+
+data = s.recv(1024)
+
+# Decodes the received data from bytes to a string and prints it
+# stripping any extra whitespace
+
+print(data.decode().strip())
+# Starts an infinite loop for continuous communication
+while True:
+    #Takes user input, strips any extra whitespace
+    user_input = input("").strip()
+    #Encodes the user input to bytes and sends it to the server
+    s.sendall(user_input.encode())
+    #Receives a response from the server, decodes it
+    #strips any extra whitespace
+    reply = s.recv(1024).decode().strip()
+    #Checks if the reply contains "Goodbye", indicating the end
+    if "Goodbye" in reply:
+        print(reply)
+        break
+    print(reply)
+s.close()
