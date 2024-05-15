@@ -1,0 +1,141 @@
+import socket
+import random
+import json
+
+# Server configurations
+server_host = ""
+server_port = 7777
+
+# Welcome banner displayed to clients
+welcome_banner = """
+== Guessing Game v1.0 ==
+Enter your name:"""
+
+# Function to generate a random number within a given range
+def generate_random_number(low, high):
+    return random.randint(low, high)
+
+# Function to load scores from a JSON file
+def load_scores(file_path="scores.json"):
+    try:
+        with open(file_path, "r") as f:
+            return json.load(f)
+    except FileNotFoundError:
+        return {}
+
+# Function to save scores to a JSON file
+def save_scores(scores, file_path="scores.json"):
+    with open(file_path, "w") as f:
+        json.dump(scores, f)
+
+# Function to determine the range of numbers based on difficulty level
+def get_difficulty_range(difficulty):
+    if difficulty == 'easy':
+        return 1, 50
+    elif difficulty == 'medium':
+        return 1, 100
+    elif difficulty == 'hard':
+        return 1, 500
+    else:
+        return 1, 50
+
+# Create a TCP socket
+server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+server_socket.bind((server_host, server_port))
+server_socket.listen(5)
+
+print(f"Server is listening on port {server_port}")
+
+# Load existing scores from file
+scores = load_scores()
+
+while True:
+    # Accept new client connections
+    conn, addr = server_socket.accept()
+    print(f"New client connected: {addr[0]}")
+    
+    # Send welcome message to client
+    conn.sendall(welcome_banner.encode())
+
+    # Receive client's name
+    name = conn.recv(1024).decode().strip()
+    
+    # If new user, initialize with default score and difficulty
+    if name not in scores:
+        scores[name] = {"score": float('inf'), "difficulty": "easy"}
+
+    # Ask client to choose difficulty
+    conn.sendall(f"Hello {name}! Choose difficulty: easy, medium, hard:".encode())
+
+    # Receive client's difficulty choice
+    difficulty = conn.recv(1024).decode().strip().lower()
+    
+    # Set default difficulty if invalid choice
+    if difficulty not in ['easy', 'medium', 'hard']:
+        difficulty = 'easy'
+    scores[name]["difficulty"] = difficulty
+
+    # Determine range based on difficulty
+    low, high = get_difficulty_range(difficulty)
+    # Generate random number within the range
+    target_number = generate_random_number(low, high)
+
+    # Prompt client to guess a number within the range
+    conn.sendall(f"Guess a number between {low} and {high}:".encode())
+
+    # Initialize attempts counter
+    attempts = 0
+    while True:
+        # Receive client's guess
+        client_input = conn.recv(1024).decode().strip()
+
+        # Check if client wants to quit
+        if client_input.lower() == 'quit':
+            conn.sendall(b"Goodbye!")
+            conn.close()
+            break
+
+        try:
+            guess = int(client_input)
+        except ValueError:
+            # Invalid input handling
+            conn.sendall(b"Invalid input. Please enter a number: ")
+            continue
+
+        attempts += 1
+
+        if guess == target_number:
+            # Correct guess handling
+            score = attempts
+            if score < scores[name]["score"]:
+                scores[name]["score"] = score
+            
+            conn.sendall(f"Correct Answer! Your score: {score}\nPlay again? (yes/no)".encode())
+            # Ask if client wants to play again
+            replay = conn.recv(1024).decode().strip().lower()
+            if replay == 'yes':
+                conn.sendall(f"Choose difficulty: easy, medium, hard:".encode())
+                difficulty = conn.recv(1024).decode().strip().lower()
+                if difficulty not in ['easy', 'medium', 'hard']:
+                    difficulty = 'easy'
+                scores[name]["difficulty"] = difficulty
+                low, high = get_difficulty_range(difficulty)
+                target_number = generate_random_number(low, high)
+                attempts = 0
+                conn.sendall(f"Guess a number between {low} and {high}:".encode())
+            else:
+                # End game if client chooses not to play again
+                conn.sendall(b"Goodbye!")
+                conn.close()
+                break
+        elif guess > target_number:
+            conn.sendall(b"Guess Lower! Enter guess: ")
+        elif guess < target_number:
+            conn.sendall(b"Guess Higher! Enter guess: ")
+    
+    # Save scores after each game
+    save_scores(scores)
+    # Display current leaderboard
+    print("Current Leaderboard:")
+    for player, stats in scores.items():
+        print(f"{player} - Score: {stats['score']} (Difficulty: {stats['difficulty']})")
